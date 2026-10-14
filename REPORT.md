@@ -17,6 +17,7 @@ Chạy trên Kaggle T4 (1 card), transformers 5.19.0 · peft 0.21.2 · bitsandby
 | E5 | GRPO từ E3 (bonus) | 39,321,600 | 8.03 | 45.7 | 0.452 | 0.411–0.493 | 0.77 | 0.339 | 0.367 | 0.699 |
 
 `parse_valid_rate`: E0 0.926 · E1 0.994 · E2–E5 1.000. VRAM = `torch.cuda.max_memory_allocated()`; phút = chỉ vòng huấn luyện.
+Đối chiếu TP/FP/FN từ evidence: E0 **39/281/544** · E1 **148/371/435** · E2 **192/324/391** · E3 **245/267/338** · E4-pixel **213/292/370** · E5 **240/238/343**.
 Ảnh minh hoạ: `report/figures/e{0,1,3}_examples.png` (3 ảnh tốt nhất + 3 tệ nhất; GT nét đứt xanh lá, dự đoán nét liền).
 
 ## 10 câu hỏi
@@ -61,9 +62,9 @@ Hệ quả: phân bố lớp lệch (val chỉ 66 pothole).
 ### Câu 7 — So sánh E1/E2/E3: mở projector và LoRA trên ViT có đáng không (F1, CI95, VRAM, thời gian)?
 | | Δ F1 | Δ VRAM | Δ thời gian | CI95 chồng nhau? |
 | --- | --- | --- | --- | --- |
-| E1 → E2 (+ projector) | +0.080 | +0.49 GB | +0.4 phút | chạm nhau (0.307–0.310) |
+| E1 → E2 (+ projector) | +0.081 | +0.49 GB | +0.4 phút | chồng nhẹ (0.307–0.310) |
 | E2 → E3 (+ LoRA ViT) | +0.098 | +0.19 GB | +7.9 phút | không |
-| E1 → E3 | +0.178 | +0.68 GB | +8.3 phút | không |
+| E1 → E3 | +0.179 | +0.68 GB | +8.3 phút | không |
 
 Mở projector gần như miễn phí (gradient không đi vào ViT). LoRA ViT tăng đều cả 3 lớp và giảm FP/ảnh 1.04 → 0.86, đổi lại +18% thời gian. **E3 đáng nhất**: +0.18 F1, VRAM 8,7 GB vẫn dư trên T4. Với box nhỏ và đặc trưng mặt đường, cho encoder thị giác thích nghi quan trọng hơn chỉ chỉnh LLM.
 
@@ -85,7 +86,7 @@ E3: **pothole kém nhất** (0.326), crack 0.366, manhole 0.696.
 | norm1000 | 0.447 | 0.407–0.490 | 0.326 / 0.366 / 0.696 |
 | pixel | 0.392 | 0.350–0.435 | 0.274 / 0.304 / 0.625 |
 
-Pixel kém hơn 0.055 và cả 3 lớp đều giảm, tài nguyên như nhau. Hợp lý vì model phải học lại quy ước toạ độ mới (lại không đẳng hướng 640 × 360). Nhưng CI chồng nhau (0.407–0.435) nên **chưa khẳng định được ở mức 95%**; cần nhiều seed hoặc test lớn hơn. Kết luận an toàn: giữ thang 0–1000.
+Pixel kém hơn **0.056 F1** và cả 3 lớp đều giảm, tài nguyên như nhau. Hợp lý vì model phải học lại quy ước toạ độ mới (lại không đẳng hướng 640 × 360). Nhưng CI chồng nhau (0.407–0.435) nên **chưa khẳng định được ở mức 95%**; cần nhiều seed hoặc test lớn hơn. Kết luận an toàn: giữ thang 0–1000.
 
 ## E5 (bonus) — GRPO với reward IoU
 **Thiết lập** (`lab_day10_e5.ipynb`, trl 1.9.2): từ adapter E3, chỉ train LoRA (39,3M; projector đóng băng), 60 bước, lr 5e-6, `beta=0`, 4 lần sinh/prompt, `max_completion_length=128`, fp16. Reward `0.2·valid + 0.8·ΣIoU / max(n_gt, n_pred, 1)`, có 6 test pass trước khi chạy. Chỉ lấy ảnh train có đáp án < 120 token để JSON đúng không bị cắt. Log: `report/e5_grpo_log.json`.
@@ -102,7 +103,7 @@ Pixel kém hơn 0.055 và cả 3 lớp đều giảm, tài nguyên như nhau. H�
 
 **Không có**: không trả `[]` để lấy điểm định dạng, không vẽ box khổng lồ. Model chỉ thận trọng hơn (ít box hơn, do mẫu số phạt box thừa): precision 0.479 → 0.502, FP/ảnh 0.86 → 0.77, recall 0.420 → 0.412.
 
-**So với SFT**: F1 0.447 → 0.452, CI gần như trùng → **không cải thiện có ý nghĩa**. Nguyên nhân: chỉ 120 ảnh với lr nhỏ, 4 lần sinh/prompt nên advantage nhiễu. Cần nhiều bước và nhiều lần sinh hơn (vLLM), có thể bật KL.
+**So với SFT**: F1 0.447 → 0.452 (**+0.0049**), CI gần như trùng → **không cải thiện có ý nghĩa**. Nguyên nhân: chỉ 120 ảnh với lr nhỏ, 4 lần sinh/prompt nên advantage nhiễu. Cần nhiều bước và nhiều lần sinh hơn (vLLM), có thể bật KL.
 
 ## Nhìn lại
 - **Ba lỗi môi trường công cụ chấm không bắt được** (evidence vẫn "hợp lệ"):
