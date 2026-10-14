@@ -1,0 +1,17 @@
+{
+ "GT box/ảnh": 1.87,
+ "E3 (SFT)": {
+  "rỗng []": 0,
+  "JSON hỏng": 0,
+  "box/ảnh": 1.65,
+  "box >25% khung": 0,
+  "reward TB": 0.4745
+ },
+ "E5 (GRPO)": {
+  "rỗng []": 0,
+  "JSON hỏng": 0,
+  "box/ảnh": 1.54,
+  "box >25% khung": 0,
+  "reward TB": 0.4727
+ }
+}
