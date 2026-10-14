@@ -194,7 +194,9 @@ def quantization_config():
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
-        llm_int8_skip_modules=["visual", "lm_head"],
+        # transformers 5 matches module names from the root. "visual" alone
+        # does not match model.visual.* and would silently quantize the ViT.
+        llm_int8_skip_modules=["model.visual", "lm_head"],
     )
 
 
@@ -210,6 +212,12 @@ def load_base_model(model_id="Qwen/Qwen3-VL-4B-Instruct", training=False):
         dtype=torch.float16,
         device_map={"": 0},
     )
+    projector = model.model.visual.merger.linear_fc1
+    if type(projector) is not torch.nn.Linear or projector.weight.dtype != torch.float16:
+        raise AssertionError(
+            f"projector must remain fp16, got {type(projector).__name__} "
+            f"with dtype {projector.weight.dtype}"
+        )
     processor = AutoProcessor.from_pretrained(model_id)
     processor.tokenizer.padding_side = "left" if not training else "right"
     if training:
@@ -316,6 +324,7 @@ def _is_projector(name):
 
 def apply_setup(model, setup, rank=16, alpha=None, dropout=0.05):
     """Freeze the base, attach exact LoRA targets, and optionally open projector."""
+    import torch
     from peft import LoraConfig, get_peft_model
 
     setup = setup.upper()
@@ -338,6 +347,10 @@ def apply_setup(model, setup, rank=16, alpha=None, dropout=0.05):
         for name, param in model.named_parameters():
             if _is_projector(name) and "lora_" not in name:
                 param.data = param.data.float()
+                # Newer torch may retain fp16 as the expected gradient dtype
+                # after replacing .data, which makes GradScaler.unscale_ fail.
+                if hasattr(param, "grad_dtype"):
+                    param.grad_dtype = torch.float32
                 param.requires_grad_(True)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     projector = sum(p.numel() for n, p in model.named_parameters()
@@ -397,6 +410,10 @@ def train(model, processor, records, out_dir, *, data_dir="data", coord="norm100
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, generator=generator,
                         collate_fn=VlmCollator(processor.tokenizer.pad_token_id), num_workers=0)
     params = [p for p in model.parameters() if p.requires_grad]
+    if not all(p.dtype == torch.float32 for p in params):
+        bad = [(name, str(param.dtype)) for name, param in model.named_parameters()
+               if param.requires_grad and param.dtype != torch.float32]
+        raise AssertionError(f"all trainable parameters must be fp32: {bad[:5]}")
     optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=0.0)
     scheduler = get_cosine_schedule_with_warmup(
         optimizer, num_warmup_steps=max(1, round(max_steps * 0.05)),
