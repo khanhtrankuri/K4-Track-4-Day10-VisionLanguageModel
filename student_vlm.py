@@ -243,7 +243,7 @@ def encode_example(processor, record, data_dir="data", coord="norm1000"):
     labels = full_enc["input_ids"].clone()
     labels[:, :n_prompt] = -100
     full_enc["labels"] = labels
-    return {key: value.squeeze(0) if key in {"input_ids", "attention_mask", "mm_token_type_ids"}
+    return {key: value.squeeze(0) if key in {"input_ids", "attention_mask", "mm_token_type_ids", "labels"}
             else value for key, value in full_enc.items()}
 
 
@@ -386,6 +386,7 @@ def train(model, processor, records, out_dir, *, data_dir="data", coord="norm100
     from torch.utils.data import DataLoader
     from transformers import get_cosine_schedule_with_warmup
 
+    model.config.use_cache = False
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
